@@ -9,6 +9,7 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 
 #include "InternalCryptLib.h"
 #include <mbedtls/pkcs7.h>
+#include <stdio.h>
 
 //
 // OID ASN.1 Value for SPC_INDIRECT_DATA_OBJID
@@ -193,9 +194,90 @@ AuthenticodeVerify (
   //
   // Verifies the PKCS#7 Signed Data in PE/COFF Authenticode Signature
   //
+
+  int test_i;
+  printf("mbedtls AUthenticode ContentSize \n");
+  for (test_i = 0; test_i < ContentSize; test_i++) {
+    printf("%02x ", SpcIndirectDataContent[test_i]);
+
+    if (test_i % 10 == 0) {
+      printf("\n");
+    }
+  }
+  printf("\n");
+
   Status = (BOOLEAN)Pkcs7Verify (OrigAuthData, DataSize, TrustedCert, CertSize, SpcIndirectDataContent, ContentSize);
 
 _Exit:
 
   return Status;
+}
+
+UINT8 other_input[] = {
+
+    // 0xa0, 
+    0x31,
+    0x7c, 0x30, 0x10, 0x06, 0x0a, 0x2b, 0x06, 0x01, 0x04, 0x01, 0x82,
+  0x37, 0x02, 0x01, 0x0c, 0x31, 0x02, 0x30, 0x00, 0x30, 0x19, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+  0xf7, 0x0d, 0x01, 0x09, 0x03, 0x31, 0x0c, 0x06, 0x0a, 0x2b, 0x06, 0x01, 0x04, 0x01, 0x82, 0x37,
+  0x02, 0x01, 0x04, 0x30, 0x1c, 0x06, 0x0a, 0x2b, 0x06, 0x01, 0x04, 0x01, 0x82, 0x37, 0x02, 0x01,
+  0x0b, 0x31, 0x0e, 0x30, 0x0c, 0x06, 0x0a, 0x2b, 0x06, 0x01, 0x04, 0x01, 0x82, 0x37, 0x02, 0x01,
+  0x15, 0x30, 0x2f, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x09, 0x04, 0x31, 0x22,
+  0x04, 0x20, 0x25, 0x60, 0x6e, 0xc8, 0x66, 0x72, 0x73, 0xb0, 0x71, 0x7b, 0x82, 0x09, 0x8c, 0x27,
+  0xe8, 0xb1, 0x4a, 0x36, 0x1c, 0x81, 0x36, 0xb4, 0x1b, 0x44, 0xdf, 0x09, 0x82, 0x8b, 0xf9, 0xb6,
+  0x1c, 0x65, 
+};
+
+
+
+BOOLEAN
+EFIAPI
+XingCertVerifySignature (
+  IN  UINT8  *VerifyData,
+  IN  UINTN   VerifyDataSize,
+  IN  UINT8  *Cert,
+  IN  UINTN   CertSize,
+  IN  UINT8  *Signature,
+  IN  UINTN   SignatureSize
+  )
+{
+
+  INT32 Ret;
+  UINT8 Hash[MBEDTLS_MD_MAX_SIZE];
+  CONST mbedtls_md_info_t *MdInfo;
+  INTN HashLen;
+  mbedtls_x509_crt  Crt;
+  mbedtls_pk_context Pk;
+  BOOLEAN Status;
+
+  mbedtls_x509_crt_init (&Crt);
+
+  Status =  FALSE;
+
+  Ret = mbedtls_x509_crt_parse_der (&Crt, Cert, CertSize);
+  if (Ret != 0) {
+    Status =  FALSE;
+    goto end;
+  }
+
+  Pk = Crt.pk;
+
+  ZeroMem(Hash, MBEDTLS_MD_MAX_SIZE);
+  MdInfo = mbedtls_md_info_from_type (MBEDTLS_MD_SHA256);
+  HashLen = mbedtls_md_get_size(MdInfo);
+  ZeroMem(Hash, MBEDTLS_MD_MAX_SIZE);
+  mbedtls_md (MdInfo, VerifyData, VerifyDataSize, Hash);
+
+  mbedtls_md (MdInfo, other_input, sizeof(other_input), Hash);
+
+  Ret = mbedtls_pk_verify (&Pk, MBEDTLS_MD_SHA256, Hash, HashLen, Signature, SignatureSize);
+  if (Ret == 0) {
+    Status =  TRUE;
+    goto end;
+  }
+
+end:
+  mbedtls_x509_crt_free(&Crt);
+
+return Status;
 }

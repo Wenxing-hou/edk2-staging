@@ -40,11 +40,11 @@ strchr (
   return ScanMem8 (str, AsciiStrSize (str), (char)ch);
 }
 
-int
-strcmp (
-  const char  *s1,
-  const char  *s2
-  )
-{
-  return (int)AsciiStrCmp (s1, s2);
-}
+// int
+// strcmp (
+//   const char  *s1,
+//   const char  *s2
+//   )
+// {
+//   return (int)AsciiStrCmp (s1, s2);
+// }

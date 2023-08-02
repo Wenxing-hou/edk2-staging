@@ -2514,6 +2514,19 @@ AuthenticodeVerify (
   IN  UINTN        HashSize
   );
 
+
+BOOLEAN
+EFIAPI
+XingCertVerifySignature (
+  IN  UINT8  *VerifyData,
+  IN  UINTN   VerifyDataSize,
+  IN  UINT8  *Cert,
+  IN  UINTN   CertSize,
+  IN  UINT8  *Signature,
+  IN  UINTN   SignatureSize
+  );
+
+
 /**
   Verifies the validity of a RFC3161 Timestamp CounterSignature embedded in PE/COFF Authenticode
   signature.

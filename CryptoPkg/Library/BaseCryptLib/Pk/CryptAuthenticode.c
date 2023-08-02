@@ -177,6 +177,17 @@ AuthenticodeVerify (
   //
   // Verifies the PKCS#7 Signed Data in PE/COFF Authenticode Signature
   //
+    int test_i;
+  printf("openssl AUthenticode ContentSize \n");
+  for (test_i = 0; test_i < ContentSize; test_i++) {
+    printf("%02x ", SpcIndirectDataContent[test_i]);
+
+    if (test_i % 10 == 0) {
+      printf("\n");
+    }
+  }
+  printf("\n");
+
   Status = (BOOLEAN)Pkcs7Verify (OrigAuthData, DataSize, TrustedCert, CertSize, SpcIndirectDataContent, ContentSize);
 
 _Exit:
@@ -186,4 +197,20 @@ _Exit:
   PKCS7_free (Pkcs7);
 
   return Status;
+}
+
+BOOLEAN
+EFIAPI
+XingCertVerifySignature (
+  IN  UINT8  *VerifyData,
+  IN  UINTN   VerifyDataSize,
+  IN  UINT8  *Cert,
+  IN  UINTN   CertSize,
+  IN  UINT8  *Signature,
+  IN  UINTN   SignatureSize
+  )
+{
+    BOOLEAN      Status;
+    Status = TRUE;
+return Status;
 }

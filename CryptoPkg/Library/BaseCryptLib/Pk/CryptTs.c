@@ -693,7 +693,7 @@ ImageTimestampVerify (
              );
 
 _Exit:
-  //
+  // 
   // Release Resources
   //
   PKCS7_free (Pkcs7);

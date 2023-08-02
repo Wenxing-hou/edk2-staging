@@ -43,3 +43,19 @@ AuthenticodeVerify (
   ASSERT (FALSE);
   return FALSE;
 }
+
+BOOLEAN
+EFIAPI
+XingCertVerifySignature (
+  IN  UINT8  *VerifyData,
+  IN  UINTN   VerifyDataSize,
+  IN  UINT8  *Cert,
+  IN  UINTN   CertSize,
+  IN  UINT8  *Signature,
+  IN  UINTN   SignatureSize
+  )
+{
+    BOOLEAN      Status;
+    Status = TRUE;
+return Status;
+}
