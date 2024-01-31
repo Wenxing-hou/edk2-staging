@@ -4396,11 +4396,11 @@ CryptoServiceTlsCtxNew (
 **/
 VOID
 EFIAPI
-CryptoServiceTlsFree (
+CryptoServiceTlsConnFree (
   IN     VOID  *Tls
   )
 {
-  CALL_VOID_BASECRYPTLIB (Tls.Services.Free, TlsFree, (Tls));
+  CALL_VOID_BASECRYPTLIB (Tls.Services.Free, TlsConnFree, (Tls));
 }
 
 /**

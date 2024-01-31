@@ -21,37 +21,37 @@ typedef UINTN size_t;
 
 /* OpenSSL will use floating point support, and C compiler produces the _fltused
    symbol by default. Simply define this symbol here to satisfy the linker. */
-int  GLOBAL_USED  _fltused = 1;
+// int  GLOBAL_USED  _fltused = 1;
 
-/* Sets buffers to a specified character */
-void *
-memset (
-  void    *dest,
-  int     ch,
-  size_t  count
-  )
-{
-  //
-  // NOTE: Here we use one base implementation for memset, instead of the direct
-  //       optimized SetMem() wrapper. Because the IntrinsicLib has to be built
-  //       without whole program optimization option, and there will be some
-  //       potential register usage errors when calling other optimized codes.
-  //
+// /* Sets buffers to a specified character */
+// void *
+// memset (
+//   void    *dest,
+//   int     ch,
+//   size_t  count
+//   )
+// {
+//   //
+//   // NOTE: Here we use one base implementation for memset, instead of the direct
+//   //       optimized SetMem() wrapper. Because the IntrinsicLib has to be built
+//   //       without whole program optimization option, and there will be some
+//   //       potential register usage errors when calling other optimized codes.
+//   //
 
-  //
-  // Declare the local variables that actually move the data elements as
-  // volatile to prevent the optimizer from replacing this function with
-  // the intrinsic memset()
-  //
-  volatile UINT8  *Pointer;
+//   //
+//   // Declare the local variables that actually move the data elements as
+//   // volatile to prevent the optimizer from replacing this function with
+//   // the intrinsic memset()
+//   //
+//   volatile UINT8  *Pointer;
 
-  Pointer = (UINT8 *)dest;
-  while (count-- != 0) {
-    *(Pointer++) = (UINT8)ch;
-  }
+//   Pointer = (UINT8 *)dest;
+//   while (count-- != 0) {
+//     *(Pointer++) = (UINT8)ch;
+//   }
 
-  return dest;
-}
+//   return dest;
+// }
 
 /* Compare bytes in two buffers. */
 int
