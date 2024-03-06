@@ -84,8 +84,6 @@ STATIC CONST TLS_ALGO_TO_NAME  TlsSignatureAlgoToName[] = {
   { TlsSignatureAlgoEcdsa,     "ECDSA" },
 };
 
-mbedtls_x509_crt OwnCrt;
-
 /**
   Gets the Mbedtls cipher suite mapping for the supplied IANA TLS cipher suite.
 
@@ -557,7 +555,7 @@ TlsSetHostPublicCert (
 
   TlsConn = (TLS_CONNECTION *)Tls;
 
-  if ((TlsConn == NULL) || (TlsConn->Ssl == NULL)) {
+  if ((TlsConn == NULL) || (TlsConn->Ssl == NULL) || (TlsConn->HostCert == NULL)) {
     return EFI_INVALID_PARAMETER;
   }
 
@@ -565,7 +563,7 @@ TlsSetHostPublicCert (
     return EFI_INVALID_PARAMETER;
   }
 
-  Ret = mbedtls_x509_crt_parse_der(&OwnCrt, Data, DataSize);
+  Ret = mbedtls_x509_crt_parse_der(TlsConn->HostCert, Data, DataSize);
   if (Ret != 0) {
     return EFI_ABORTED;
   }
@@ -610,7 +608,7 @@ TlsSetHostPrivateKeyEx (
 
   TlsConn = (TLS_CONNECTION *)Tls;
 
-  if ((TlsConn == NULL) || (TlsConn->Ssl == NULL) || (Data == NULL) || (DataSize == 0)) {
+  if ((TlsConn == NULL) || (TlsConn->Ssl == NULL) || (TlsConn->HostCert == NULL) || (Data == NULL) || (DataSize == 0)) {
     return EFI_INVALID_PARAMETER;
   }
 
@@ -667,7 +665,7 @@ TlsSetHostPrivateKeyEx (
 
 SetKey:
 
-  if (mbedtls_ssl_conf_own_cert((mbedtls_ssl_config *)TlsConn->Ssl->conf, &OwnCrt, pk) != 0) {
+  if (mbedtls_ssl_conf_own_cert((mbedtls_ssl_config *)TlsConn->Ssl->conf, TlsConn->HostCert, pk) != 0) {
     return EFI_ABORTED;
   }
 

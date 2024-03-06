@@ -27,9 +27,13 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 
 typedef struct
 {
-  UINTN CipherTextBufferSize;
-  UINT8 *CipherTextBuffer;
-  UINTN RemainderSize;
+  UINTN InBufferSize;
+  UINT8 *InBuffer;
+  UINTN InRemainderSize;
+
+  UINTN OutBufferSize;
+  UINT8 *OutBuffer;
+  UINTN OutRemainderSize;
 } TLS_CIPHER_BUFFER;
 
 typedef struct {
@@ -47,6 +51,9 @@ typedef struct {
   // SSL/TLS configuration to be shared between mbedtls_ssl_context structures.
   //
   mbedtls_ssl_config  *Conf;
+
+
+  mbedtls_x509_crt *HostCert;
 
 } TLS_CONNECTION;
 

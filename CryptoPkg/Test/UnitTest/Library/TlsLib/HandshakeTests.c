@@ -215,9 +215,12 @@ TestTlsHandshakePreReq (
   if (!TlsInitialize ()) {
     return UNIT_TEST_ERROR_TEST_FAILED;
   }
-  // Use minimal version of TLS 1.2
-  TestTlsCtxClient  = TlsCtxNew (0x3, 0x03);
-  TestTlsCtxServer  = TlsCtxNew (0x3, 0x03);
+  //
+  // Create a new SSL_CTX object as framework to establish TLS/SSL enabled
+  // connections. TLS 1.0 is used as the default version.
+  //
+  TestTlsCtxClient  = TlsCtxNew (0x3, 0x01);
+  TestTlsCtxServer  = TlsCtxNew (0x3, 0x01);
   if ((TestTlsCtxClient == NULL) || (TestTlsCtxServer == NULL)) {
     return UNIT_TEST_ERROR_TEST_FAILED;
   }
@@ -230,7 +233,7 @@ TestTlsHandshakePreReq (
 
   TlsSetConnectionEnd (TestTlsConnClient, FALSE);
   TlsSetConnectionEnd (TestTlsConnServer, TRUE);
-  TlsSetVerify (TestTlsConnClient, EFI_TLS_VERIFY_PEER);
+  TlsSetVerify (TestTlsConnClient, EFI_TLS_VERIFY_NONE);
   if (TlsSetVersion (TestTlsConnClient, 0x03, 0x03) != EFI_SUCCESS ||
       TlsSetVersion (TestTlsConnServer, 0x03, 0x03) != EFI_SUCCESS ||
       TlsSetCaCertificate (TestTlsConnClient, TestTlsEcCA, sizeof (TestTlsEcCA)) != EFI_SUCCESS ||
@@ -255,15 +258,15 @@ TestTlsHandshakeCleanUp (
   UNIT_TEST_CONTEXT  Context
   )
 {
-  TlsConnFree (TestTlsCtxClient);
-  TlsConnFree (TestTlsCtxServer);
-  TlsCtxFree (TestTlsConnClient);
-  TlsCtxFree (TestTlsConnServer);
+  TlsCtxFree (TestTlsCtxClient);
+  TlsCtxFree (TestTlsCtxServer);
+  TlsConnFree (TestTlsConnClient);
+  TlsConnFree (TestTlsConnServer);
 }
 
 UNIT_TEST_STATUS
 EFIAPI
-TestTlsHandshake_onebyone_step (
+TestTlsHandshake_fourtime_step (
   UNIT_TEST_CONTEXT  Context
   )
 {
@@ -272,13 +275,22 @@ TestTlsHandshake_onebyone_step (
   UINTN ClientMSize;
   UINT8 ServerM[2048];
   UINTN ServerMSize;
+  UINT8 FinalServerM[2048];
+  UINTN FinalServerMSize;
 
-  //Test Valid Certificate
-  DEBUG ((DEBUG_INFO, "### Valid Certificate Test Start...\n"));
+
+  SetMem(ClientM, 2048, 0);
+  SetMem(ServerM, 2048, 0);
+  SetMem(FinalServerM, 2048, 0);
   ClientMSize = 2048;
   ServerMSize = 2048;
-  //client write      Client Hello
+  FinalServerMSize = 0;
+
+
+  DEBUG ((DEBUG_INFO, "### Tls test ###\n\n"));
   while(1);
+/********************************************************************client************************************************************************************/
+  //client write      Client Hello
   if (TlsDoHandshake (TestTlsConnClient, NULL, 0, ClientM, &ClientMSize) != EFI_SUCCESS) {
     DEBUG ((DEBUG_INFO, "Error: At Client Hello\n"));
     return UNIT_TEST_ERROR_TEST_FAILED;
@@ -296,12 +308,18 @@ TestTlsHandshake_onebyone_step (
   }
 
 
-
+/********************************************************************server************************************************************************************/
   //Server  parse client Hello
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
     DEBUG ((DEBUG_INFO, "Error: At Server parse client Hello\n"));
     return UNIT_TEST_ERROR_TEST_FAILED;
   };
+
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
+
   DEBUG ((DEBUG_INFO, "### Server Server parse client Hello \n"));
 
   //Server write server Hello
@@ -311,6 +329,10 @@ TestTlsHandshake_onebyone_step (
   };
   DEBUG ((DEBUG_INFO, "### Server write server Hello:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
 
   //Server write cert
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
@@ -319,6 +341,10 @@ TestTlsHandshake_onebyone_step (
   };
   DEBUG ((DEBUG_INFO, "### Server write cert OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
 
   //Server write sever key exchange
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
@@ -327,6 +353,10 @@ TestTlsHandshake_onebyone_step (
   };
   DEBUG ((DEBUG_INFO, "### Server  key exchange OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
 
   //Server skip cert request
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
@@ -335,6 +365,10 @@ TestTlsHandshake_onebyone_step (
   };
   DEBUG ((DEBUG_INFO, "### Server skip cert request OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
 
   //Server write server done
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
@@ -343,55 +377,38 @@ TestTlsHandshake_onebyone_step (
   };
   DEBUG ((DEBUG_INFO, "### Server server done OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
 
-
-
-
-
-
-
-
-
+/********************************************************************client************************************************************************************/
   DEBUG ((DEBUG_INFO, "### client verify server hello/ verify  Verify Cert \n"));
   //client  send client hello(don't send)/   parse  server hello    
   ClientMSize = 65535;
-  if (TlsDoHandshake (TestTlsConnClient, ServerM, ServerMSize, ClientM, &ClientMSize) != EFI_SUCCESS) {
+  if (TlsDoHandshake (TestTlsConnClient, FinalServerM, FinalServerMSize, ClientM, &ClientMSize) != EFI_SUCCESS) {
     DEBUG ((DEBUG_INFO, "### parse  server hello error:\n"));
     return UNIT_TEST_ERROR_TEST_FAILED;
   };
-
-
-/// client  verify  Verify Cert
- DEBUG ((DEBUG_INFO, "### Client verify  Verify Cert\n\n\n"));
-  if (TlsDoHandshake (TestTlsConnClient, ServerM, ServerMSize, ClientM, &ClientMSize) != EFI_SUCCESS) {
-    DEBUG ((DEBUG_INFO, "### verify  Verify Cert error:\n"));
-    return UNIT_TEST_ERROR_TEST_FAILED;
-  };
-
-UINT8 FLAG;
-FLAG = 0;
-// cleint   parse key exhange?    parse cert requeset?   sever done?
-while(FLAG < 8) {
-FLAG++;
- DEBUG ((DEBUG_INFO, "### Client parse key exhange?    parse cert requeset?   sever done?\n"));
-  if (TlsDoHandshake (TestTlsConnClient, ServerM, ServerMSize, ClientM, &ClientMSize) != EFI_SUCCESS) {
-    DEBUG ((DEBUG_INFO, "### verify  error:\n"));
-    return UNIT_TEST_ERROR_TEST_FAILED;
-  };
-
-}
 DEBUG ((DEBUG_INFO, "client ok\n\n"));
 
 
 
-
+/********************************************************************server************************************************************************************/
 //server parse client cert skip
+  SetMem(FinalServerM, 2048, 0);
+  FinalServerMSize = 0;
+
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
     DEBUG ((DEBUG_INFO, "Error: Server parse client cert skip\n"));
     return UNIT_TEST_ERROR_TEST_FAILED;
   };
   DEBUG ((DEBUG_INFO, "### Server parse client cert skip OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
 
 //server parse key exchange
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
@@ -400,6 +417,10 @@ DEBUG ((DEBUG_INFO, "client ok\n\n"));
   };
   DEBUG ((DEBUG_INFO, "### Server parse key exchange OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
 
 //server parse cert verify skip
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
@@ -408,6 +429,10 @@ DEBUG ((DEBUG_INFO, "client ok\n\n"));
   };
   DEBUG ((DEBUG_INFO, "### Server parse parse cert verify skip OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
 
 //server parse change cipher
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
@@ -416,6 +441,10 @@ DEBUG ((DEBUG_INFO, "client ok\n\n"));
   };
   DEBUG ((DEBUG_INFO, "### Server parse change cipher OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
 
 //server parse finished
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
@@ -424,6 +453,10 @@ DEBUG ((DEBUG_INFO, "client ok\n\n"));
   };
   DEBUG ((DEBUG_INFO, "### Server parse finished OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
 
 //server write cipher spec
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
@@ -432,6 +465,10 @@ DEBUG ((DEBUG_INFO, "client ok\n\n"));
   };
   DEBUG ((DEBUG_INFO, "### Server parse cipher spec OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
 
 //server write finished
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
@@ -440,6 +477,10 @@ DEBUG ((DEBUG_INFO, "client ok\n\n"));
   };
   DEBUG ((DEBUG_INFO, "### Server write finished OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
 
 //server write flush buffer
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
@@ -448,6 +489,10 @@ DEBUG ((DEBUG_INFO, "client ok\n\n"));
   };
   DEBUG ((DEBUG_INFO, "### Server write flush buffer OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
 
 //server handshake wrapup
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
@@ -456,39 +501,31 @@ DEBUG ((DEBUG_INFO, "client ok\n\n"));
   };
   DEBUG ((DEBUG_INFO, "### Server handshake wrapup OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
 DEBUG ((DEBUG_INFO, "server ok\n\n"));
 
-
-
-
+/********************************************************************client************************************************************************************/
 // cleint   parse key exhange?  skip   parse cert requeset?   sever done?
-FLAG = 0;
-while(FLAG  < 4) {
-FLAG++;
+
  DEBUG ((DEBUG_INFO, "### Client parse server cipher/    parse server finish?   flush  wrapup\n"));
-  if (TlsDoHandshake (TestTlsConnClient, ServerM, ServerMSize, ClientM, &ClientMSize) != EFI_SUCCESS) {
+  if (TlsDoHandshake (TestTlsConnClient, FinalServerM, FinalServerMSize, ClientM, &ClientMSize) != EFI_SUCCESS) {
     DEBUG ((DEBUG_INFO, "### verify  error:\n"));
     return UNIT_TEST_ERROR_TEST_FAILED;
   };
 
-}
 DEBUG ((DEBUG_INFO, "client ok\n\n"));
-
-
-
-
-
-
-
-
   DEBUG ((DEBUG_INFO, "### all handshake over\n"));
+
   // TLS write and read:  application phase
   ServerM[0] = 1;
   ServerM[1] = 2;
   ServerM[2] = 3;
   ServerMSize = 3;
 
-  //server ServerM 传进来是明文
+  //server ServerM 传进来的是明文
   TlsWrite (TestTlsConnServer, ServerM, ServerMSize);
 
   //server ServerM 传出去是密文
@@ -524,18 +561,325 @@ TestTlsHandshake_normal_step (
   UNIT_TEST_CONTEXT  Context
   )
 {
+  UINT8 ClientM[2048];
+  UINTN ClientMSize;
+  UINT8 ServerM[2048];
+  UINTN ServerMSize;
+  UINT8 FinalServerM[2048];
+  UINTN FinalServerMSize;
+
+
+  SetMem(ClientM, 2048, 0);
+  SetMem(ServerM, 2048, 0);
+  SetMem(FinalServerM, 2048, 0);
+  ClientMSize = 2048;
+  ServerMSize = 2048;
+  FinalServerMSize = 0;
+
+  DEBUG ((DEBUG_INFO, "### Valid Certificate Test Start...\n"));
+
+
+  while(1);
+/********************************************************************client************************************************************************************/
+
+  if (TlsDoHandshake (TestTlsConnClient, NULL, 0, ClientM, &ClientMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "Error: At Client Hello\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+  DEBUG ((DEBUG_INFO, "### Client Hello Message:\n"));
+  TestPrintBuffer (ClientM, ClientMSize);
+
+  //Set Valid Certificate
+  if (TlsSetHostPublicCert (TestTlsConnServer, TestTlsEcServer, sizeof (TestTlsEcServer))
+                            != EFI_SUCCESS
+      || TlsSetHostPrivateKey (TestTlsConnServer, TestTlsEcServerKey, sizeof (TestTlsEcServerKey))
+                            != EFI_SUCCESS) {
+     DEBUG ((DEBUG_INFO, "Error: At setting valid certificate\n"));
+     return UNIT_TEST_ERROR_TEST_FAILED;
+  }
+
+/********************************************************************server************************************************************************************/
+  //Server  parse client Hello
+  if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "Error: At Server parse client Hello\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+  DEBUG ((DEBUG_INFO, "### Server Server parse client Hello \n"));
+  TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
+
+  //Server write server Hello
+  if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "Error: At /Server write client Hello\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+  DEBUG ((DEBUG_INFO, "### Server write server Hello:\n"));
+  TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
+
+  //Server write cert
+  if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "Error: Server write cert\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+  DEBUG ((DEBUG_INFO, "### Server write cert OK:\n"));
+  TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
+
+/********************************************************************client************************************************************************************/
+  DEBUG ((DEBUG_INFO, "### client verify server hello/ verify  Verify Cert \n"));
+  //client  send client hello(don't send)/   parse  server hello    
+  ClientMSize = 65535;
+  if (TlsDoHandshake (TestTlsConnClient, FinalServerM, FinalServerMSize, ClientM, &ClientMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "### parse  server hello error:\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+
+
+/********************************************************************server************************************************************************************/
+  SetMem(FinalServerM, 2048, 0);
+  FinalServerMSize = 0;
+  //Server write sever key exchange
+  if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "Error: Server  key exchange\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+  DEBUG ((DEBUG_INFO, "### Server  key exchange OK:\n"));
+  TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
+
+  //Server skip cert request
+  if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "Error: Server skip cert request\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+  DEBUG ((DEBUG_INFO, "### Server skip cert request OK:\n"));
+  TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
+
+  //Server write server done
+  if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "Error: Server server done\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+  DEBUG ((DEBUG_INFO, "### Server server done OK:\n"));
+  TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
+
+/********************************************************************client************************************************************************************/
+// cleint   parse key exhange?    parse cert requeset?   sever done?
+
+ DEBUG ((DEBUG_INFO, "### Client parse key exhange?    parse cert requeset?   sever done?\n"));
+  if (TlsDoHandshake (TestTlsConnClient, FinalServerM, FinalServerMSize, ClientM, &ClientMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "### verify  error:\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+
+DEBUG ((DEBUG_INFO, "client ok\n\n"));
+
+
+
+/********************************************************************server************************************************************************************/
+//server parse client cert skip
+  SetMem(FinalServerM, 2048, 0);
+  FinalServerMSize = 0;
+
+  if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "Error: Server parse client cert skip\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+  DEBUG ((DEBUG_INFO, "### Server parse client cert skip OK:\n"));
+  TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
+
+//server parse key exchange
+  if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "Error: Server parse key exchange\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+  DEBUG ((DEBUG_INFO, "### Server parse key exchange OK:\n"));
+  TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
+
+//server parse cert verify skip
+  if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "Error: Server parse cert verify skip\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+  DEBUG ((DEBUG_INFO, "### Server parse parse cert verify skip OK:\n"));
+  TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
+
+//server parse change cipher
+  if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "Error: Server parse change cipher\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+  DEBUG ((DEBUG_INFO, "### Server parse change cipher OK:\n"));
+  TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
+
+//server parse finished
+  if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "Error: Server parse finished\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+  DEBUG ((DEBUG_INFO, "### Server parse finished OK:\n"));
+  TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
+
+//server write cipher spec
+  if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "Error: Server write cipher spec\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+  DEBUG ((DEBUG_INFO, "### Server parse cipher spec OK:\n"));
+  TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
+
+//server write finished
+  if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "Error: Server write finished\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+  DEBUG ((DEBUG_INFO, "### Server write finished OK:\n"));
+  TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
+
+//server write flush buffer
+  if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "Error: Server write flush buffer\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+  DEBUG ((DEBUG_INFO, "### Server write flush buffer OK:\n"));
+  TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
+
+//server handshake wrapup
+  if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "Error: Server handshake wrapup\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+  DEBUG ((DEBUG_INFO, "### Server handshake wrapup OK:\n"));
+  TestPrintBuffer (ServerM, ServerMSize);
+  if (ServerMSize != 0) {
+    CopyMem(FinalServerM + FinalServerMSize, ServerM, ServerMSize);
+    FinalServerMSize += ServerMSize;
+  }
+DEBUG ((DEBUG_INFO, "server ok\n\n"));
+
+
+/********************************************************************client************************************************************************************/
+// cleint   parse key exhange?  skip   parse cert requeset?   sever done?
+
+ DEBUG ((DEBUG_INFO, "### Client parse server cipher/    parse server finish?   flush  wrapup\n"));
+  if (TlsDoHandshake (TestTlsConnClient, FinalServerM, FinalServerMSize, ClientM, &ClientMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "### verify  error:\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+
+DEBUG ((DEBUG_INFO, "client ok\n\n"));
+  DEBUG ((DEBUG_INFO, "### all handshake over\n"));
+
+  // TLS write and read:  application phase
+  ServerM[0] = 1;
+  ServerM[1] = 2;
+  ServerM[2] = 3;
+  ServerMSize = 3;
+
+  //server ServerM 传进来是明文
+  TlsWrite (TestTlsConnServer, ServerM, ServerMSize);
+
+  //server ServerM 传出去是密文
+  ServerMSize = 65535;
+  ServerMSize = TlsCtrlTrafficOut (TestTlsConnServer, ServerM, ServerMSize);
+ 
+
+ //client 传进来的ServerM是密文
+  ServerMSize = TlsCtrlTrafficIn (TestTlsConnClient, ServerM, ServerMSize);
+//client 传出去的ServerM是明文
+  TlsRead (TestTlsConnClient, ServerM, ServerMSize);
+
+
+
+  if (TlsShutdown (TestTlsConnClient) != EFI_SUCCESS
+      || TlsShutdown (TestTlsConnServer) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "Error: At Conn Shutdown\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;        
+  }
+
+
+  // F : SSL_F_TLS_PROCESS_SERVER_CERTIFICATE := 367 := 0x16f
+  // R : SSL_R_CERTIFICATE_VERIFY_FAILED := 134 := 0x86
+  return UNIT_TEST_PASSED;
+}
+
+
+
+UNIT_TEST_STATUS
+EFIAPI
+TestTlsHandshake_onebyone_step (
+  UNIT_TEST_CONTEXT  Context
+  )
+{
   // BOOLEAN  Status;
   UINT8 ClientM[2048];
   UINTN ClientMSize;
   UINT8 ServerM[2048];
   UINTN ServerMSize;
 
-  //Test Valid Certificate
-  DEBUG ((DEBUG_INFO, "### Valid Certificate Test Start...\n"));
+
+  SetMem(ClientM, 2048, 0);
+  SetMem(ServerM, 2048, 0);
   ClientMSize = 2048;
   ServerMSize = 2048;
-  //client write      Client Hello
+
+
+  DEBUG ((DEBUG_INFO, "### Tls one by one test ###\n\n"));
   while(1);
+  ////////////////client write      Client Hello
   if (TlsDoHandshake (TestTlsConnClient, NULL, 0, ClientM, &ClientMSize) != EFI_SUCCESS) {
     DEBUG ((DEBUG_INFO, "Error: At Client Hello\n"));
     return UNIT_TEST_ERROR_TEST_FAILED;
@@ -553,17 +897,14 @@ TestTlsHandshake_normal_step (
   }
 
 
-
-/*server*/
-
-  //Server  parse client Hello
+  //////////////////////Server  parse client Hello
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
     DEBUG ((DEBUG_INFO, "Error: At Server parse client Hello\n"));
     return UNIT_TEST_ERROR_TEST_FAILED;
   };
   DEBUG ((DEBUG_INFO, "### Server Server parse client Hello \n"));
 
-  //Server write server Hello
+  ///////////////////////Server write server Hello
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
     DEBUG ((DEBUG_INFO, "Error: At /Server write client Hello\n"));
     return UNIT_TEST_ERROR_TEST_FAILED;
@@ -572,9 +913,9 @@ TestTlsHandshake_normal_step (
   TestPrintBuffer (ServerM, ServerMSize);
 
 
-/*client*/
-  DEBUG ((DEBUG_INFO, "### client verify server hello/ verify  Verify Cert \n"));
-  //client  send client hello(don't send)/   parse  server hello    
+
+  ////////////////////////client  send client hello(don't send)/   parse  server hello 
+  DEBUG ((DEBUG_INFO, "### client verify server hello/ verify  Verify Cert \n"));   
   ClientMSize = 65535;
   if (TlsDoHandshake (TestTlsConnClient, ServerM, ServerMSize, ClientM, &ClientMSize) != EFI_SUCCESS) {
     DEBUG ((DEBUG_INFO, "### parse  server hello error:\n"));
@@ -582,9 +923,7 @@ TestTlsHandshake_normal_step (
   };
 
 
-
-
-  //Server write cert
+  /////////////////Server write cert
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
     DEBUG ((DEBUG_INFO, "Error: Server write cert\n"));
     return UNIT_TEST_ERROR_TEST_FAILED;
@@ -592,7 +931,14 @@ TestTlsHandshake_normal_step (
   DEBUG ((DEBUG_INFO, "### Server write cert OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
 
-  //Server write sever key exchange
+ /////////////////// client  verify  Verify Cert
+ DEBUG ((DEBUG_INFO, "### Client verify  Verify Cert\n\n\n"));
+  if (TlsDoHandshake (TestTlsConnClient, ServerM, ServerMSize, ClientM, &ClientMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "### verify  Verify Cert error:\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+
+  ///////////Server write sever key exchange
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
     DEBUG ((DEBUG_INFO, "Error: Server  key exchange\n"));
     return UNIT_TEST_ERROR_TEST_FAILED;
@@ -600,15 +946,24 @@ TestTlsHandshake_normal_step (
   DEBUG ((DEBUG_INFO, "### Server  key exchange OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
 
-  //Server skip cert request
+ /////////////////// client  parse key exhange
+ DEBUG ((DEBUG_INFO, "### Client parse key exhange\n"));
+  if (TlsDoHandshake (TestTlsConnClient, ServerM, ServerMSize, ClientM, &ClientMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "### verify parse key exhange error:\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+
+
+  ////////////////Server skip cert request
+  DEBUG ((DEBUG_INFO, "### Server skip cert request OK:\n"));
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
     DEBUG ((DEBUG_INFO, "Error: Server skip cert request\n"));
     return UNIT_TEST_ERROR_TEST_FAILED;
   };
-  DEBUG ((DEBUG_INFO, "### Server skip cert request OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
 
-  //Server write server done
+
+  ///////////////////Server write server done
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
     DEBUG ((DEBUG_INFO, "Error: Server server done\n"));
     return UNIT_TEST_ERROR_TEST_FAILED;
@@ -618,38 +973,17 @@ TestTlsHandshake_normal_step (
 
 
 
-
-
-
-
-
-/*client*/
-
-/// client  verify  Verify Cert
- DEBUG ((DEBUG_INFO, "### Client verify  Verify Cert\n\n\n"));
-  if (TlsDoHandshake (TestTlsConnClient, ServerM, ServerMSize, ClientM, &ClientMSize) != EFI_SUCCESS) {
-    DEBUG ((DEBUG_INFO, "### verify  Verify Cert error:\n"));
-    return UNIT_TEST_ERROR_TEST_FAILED;
-  };
-
-UINT8 FLAG;
-FLAG = 0;
-// cleint   parse key exhange?    parse cert requeset?   sever done?
-while(FLAG < 8) {
-FLAG++;
- DEBUG ((DEBUG_INFO, "### Client parse key exhange?    parse cert requeset?   sever done?\n"));
+  ///////////////////Client parse cert requeset?   sever done?
+  DEBUG ((DEBUG_INFO, "### Client parse cert requeset?   sever done?\n"));
   if (TlsDoHandshake (TestTlsConnClient, ServerM, ServerMSize, ClientM, &ClientMSize) != EFI_SUCCESS) {
     DEBUG ((DEBUG_INFO, "### verify  error:\n"));
     return UNIT_TEST_ERROR_TEST_FAILED;
   };
 
-}
 DEBUG ((DEBUG_INFO, "client ok\n\n"));
 
-
-
-
 //server parse client cert skip
+
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
     DEBUG ((DEBUG_INFO, "Error: Server parse client cert skip\n"));
     return UNIT_TEST_ERROR_TEST_FAILED;
@@ -665,6 +999,7 @@ DEBUG ((DEBUG_INFO, "client ok\n\n"));
   DEBUG ((DEBUG_INFO, "### Server parse key exchange OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
 
+
 //server parse cert verify skip
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
     DEBUG ((DEBUG_INFO, "Error: Server parse cert verify skip\n"));
@@ -672,6 +1007,7 @@ DEBUG ((DEBUG_INFO, "client ok\n\n"));
   };
   DEBUG ((DEBUG_INFO, "### Server parse parse cert verify skip OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
+
 
 //server parse change cipher
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
@@ -689,7 +1025,7 @@ DEBUG ((DEBUG_INFO, "client ok\n\n"));
   DEBUG ((DEBUG_INFO, "### Server parse finished OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
 
-//server write cipher spec
+////////////////////////////////////server write cipher spec
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
     DEBUG ((DEBUG_INFO, "Error: Server write cipher spec\n"));
     return UNIT_TEST_ERROR_TEST_FAILED;
@@ -697,13 +1033,31 @@ DEBUG ((DEBUG_INFO, "client ok\n\n"));
   DEBUG ((DEBUG_INFO, "### Server parse cipher spec OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
 
-//server write finished
+////////////////////////////////////Client parse server cipher
+ DEBUG ((DEBUG_INFO, "### Client parse server cipher\n"));
+  if (TlsDoHandshake (TestTlsConnClient, ServerM, ServerMSize, ClientM, &ClientMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "### Client parse server cipher verify  error:\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+
+
+////////////////////////////////////server write finished
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
     DEBUG ((DEBUG_INFO, "Error: Server write finished\n"));
     return UNIT_TEST_ERROR_TEST_FAILED;
   };
   DEBUG ((DEBUG_INFO, "### Server write finished OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
+
+
+////////////////////////////////////Client parse server finish
+ DEBUG ((DEBUG_INFO, "### Client parse server finish \n"));
+  if (TlsDoHandshake (TestTlsConnClient, ServerM, ServerMSize, ClientM, &ClientMSize) != EFI_SUCCESS) {
+    DEBUG ((DEBUG_INFO, "###  Client server finish verify  error:\n"));
+    return UNIT_TEST_ERROR_TEST_FAILED;
+  };
+
+
 
 //server write flush buffer
   if (TlsDoHandshake (TestTlsConnServer, ClientM, ClientMSize, ServerM, &ServerMSize) != EFI_SUCCESS) {
@@ -720,39 +1074,18 @@ DEBUG ((DEBUG_INFO, "client ok\n\n"));
   };
   DEBUG ((DEBUG_INFO, "### Server handshake wrapup OK:\n"));
   TestPrintBuffer (ServerM, ServerMSize);
+
 DEBUG ((DEBUG_INFO, "server ok\n\n"));
-
-
-
-
-// cleint   parse key exhange?  skip   parse cert requeset?   sever done?
-FLAG = 0;
-while(FLAG  < 4) {
-FLAG++;
- DEBUG ((DEBUG_INFO, "### Client parse server cipher/    parse server finish?   flush  wrapup\n"));
-  if (TlsDoHandshake (TestTlsConnClient, ServerM, ServerMSize, ClientM, &ClientMSize) != EFI_SUCCESS) {
-    DEBUG ((DEBUG_INFO, "### verify  error:\n"));
-    return UNIT_TEST_ERROR_TEST_FAILED;
-  };
-
-}
 DEBUG ((DEBUG_INFO, "client ok\n\n"));
+DEBUG ((DEBUG_INFO, "### all handshake over\n"));
 
-
-
-
-
-
-
-
-  DEBUG ((DEBUG_INFO, "### all handshake over\n"));
   // TLS write and read:  application phase
   ServerM[0] = 1;
   ServerM[1] = 2;
   ServerM[2] = 3;
   ServerMSize = 3;
 
-  //server ServerM 传进来是明文
+  //server ServerM 传进来的是明文
   TlsWrite (TestTlsConnServer, ServerM, ServerMSize);
 
   //server ServerM 传出去是密文
@@ -799,14 +1132,17 @@ TEST_DESC  mHandshakeTest[] = {
   // 四次握手，每次server都是一次性发过来
   // 第一次是(parse clienthello) +(wirte serverhello）+(wirte cert) +(wirte keyexchange) +(skip certrequest）+(wirte serverhello done）
   // 第二次是(parse clientcert) +(parse keyexchange) +(parse certverify skip) +(parse clientcipherspec) +(wirte exchangecipher spec）+(wirte finished）/+(flush buffer）+(handshake wrapup）/
-  { "TestVerifyHandshake()", "CryptoPkg.TlsLib", TestTlsHandshake_onebyone_step, TestTlsHandshakePreReq, TestTlsHandshakeCleanUp, NULL },
+  { "TestVerifyHandshake()", "CryptoPkg.TlsLib", TestTlsHandshake_fourtime_step, TestTlsHandshakePreReq, TestTlsHandshakeCleanUp, NULL },
 
   //四次握手，server分开发
-  // 第一次是(parse clienthello) +(wirte serverhello)
-  // (wirte cert) +(wirte keyexchange) +(skip certrequest）+(wirte serverhello done）
+  // 第一次是(parse clienthello) +(wirte serverhello) + (wirte cert)
+  // (wirte keyexchange) +(skip certrequest）+(wirte serverhello done）
 
   // 第二次是(parse clientcert) +(parse keyexchange) +(parse certverify skip) +(parse clientcipherspec) +(wirte exchangecipher spec）+(wirte finished）/+(flush buffer）+(handshake wrapup）/
   { "TestVerifyHandshake()", "CryptoPkg.TlsLib", TestTlsHandshake_normal_step, TestTlsHandshakePreReq, TestTlsHandshakeCleanUp, NULL },
+
+  //一次一次的进行
+  { "TestVerifyHandshake()", "CryptoPkg.TlsLib", TestTlsHandshake_onebyone_step, TestTlsHandshakePreReq, TestTlsHandshakeCleanUp, NULL },
 };
 
 UINTN  mHandshakeTestNum = ARRAY_SIZE (mHandshakeTest);
