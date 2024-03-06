@@ -9,7 +9,60 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 
 #include "InternalTlsLib.h"
 
+#define MAX_BUFFER_SIZE  32768
+
 int myrand( void *rng_state, unsigned char *output, size_t len );
+
+
+int MbedtlsSend( void *ctx, const unsigned char *buf, size_t len )
+{
+  TLS_CIPHER_BUFFER * TlsCipherCtx;
+  UINTN CipherLen;
+
+  // UINT8 test[1500];
+  // memset(test, 0, 1500);
+  TlsCipherCtx = ctx;
+
+
+
+
+  CipherLen = len;
+
+
+  // CopyMem(TlsCipherCtx->InBuffer + TlsCipherCtx->InRemainderSize, buf, CipherLen);
+  // TlsCipherCtx->InRemainderSize += CipherLen;
+
+
+  CopyMem(TlsCipherCtx->OutBuffer + TlsCipherCtx->OutRemainderSize, buf, CipherLen);
+  TlsCipherCtx->OutRemainderSize += CipherLen;
+
+
+
+  return (int)(CipherLen);
+}
+
+int MbedtlsRecv( void *ctx, unsigned char *buf, size_t len )
+{
+  TLS_CIPHER_BUFFER * TlsCipherCtx;
+  UINTN CipherLen;
+
+  TlsCipherCtx = ctx;
+
+  CipherLen = len;
+
+  CopyMem(buf, TlsCipherCtx->InBuffer + (TlsCipherCtx->InBufferSize - TlsCipherCtx->InRemainderSize) , CipherLen);
+
+  TlsCipherCtx->InRemainderSize -= CipherLen;
+
+
+
+  // UINT8 test[1500];
+  // memset(test, 0, 1500);
+  // CopyMem(test, buf, CipherLen);
+
+  return (int)(CipherLen);
+}
+
 /**
   Initializes the MbedTLS library.
 
@@ -69,25 +122,10 @@ TlsCtxNew (
   IN     UINT8  MinorVer
   )
 {
-  mbedtls_ssl_protocol_version ssl_version;
   mbedtls_ssl_context *Ssl;
-  UINT16   ProtoVersion;
-
-  ProtoVersion = (MajorVer << 8) | MinorVer;
-
-  if (ProtoVersion == 0x0304) {
-    ssl_version = MBEDTLS_SSL_VERSION_TLS1_3;
-  } else if (ProtoVersion == 0x0303) {
-    ssl_version = MBEDTLS_SSL_VERSION_TLS1_2;
-  } else {
-    return NULL;
-  }
-
   Ssl = AllocateZeroPool(sizeof(mbedtls_ssl_context));
 
   mbedtls_ssl_init(Ssl);
-
-  Ssl->tls_version = ssl_version;
 
   return (VOID *)Ssl;
 }
@@ -103,7 +141,7 @@ TlsCtxNew (
 **/
 VOID
 EFIAPI
-TlsFree (
+TlsConnFree (
   IN     VOID  *Tls
   )
 {
@@ -119,6 +157,23 @@ TlsFree (
   //
   if (TlsConn->Ssl != NULL) {
     mbedtls_ssl_free (TlsConn->Ssl);
+  }
+
+  if (TlsConn->Conf != NULL) {
+    mbedtls_ssl_config_free (TlsConn->Conf);
+  }
+
+  if (TlsConn->TlsCipherBuffer.InBuffer != NULL) {
+    FreePool(TlsConn->TlsCipherBuffer.InBuffer);
+  }
+
+  if (TlsConn->TlsCipherBuffer.OutBuffer != NULL) {
+    FreePool(TlsConn->TlsCipherBuffer.OutBuffer);
+  }
+
+  if (TlsConn->HostCert != NULL) {
+    mbedtls_x509_crt_free (TlsConn->HostCert);
+     FreePool(TlsConn->HostCert);
   }
 
   FreePool (Tls);
@@ -154,12 +209,17 @@ TlsNew (
     return NULL;
   }
 
-  TlsConn->Ssl = (mbedtls_ssl_context *)TlsCtx;
+  TlsConn->Ssl = AllocateZeroPool(sizeof(mbedtls_ssl_context));
+  mbedtls_ssl_init(TlsConn->Ssl);
+  // TlsConn->Ssl = (mbedtls_ssl_context *)TlsCtx;
 
   TlsConn->Conf = AllocateZeroPool(sizeof( mbedtls_ssl_config));
   mbedtls_ssl_config_init(TlsConn->Conf);
 
   mbedtls_ssl_conf_rng(TlsConn->Conf, myrand, NULL);
+
+  TlsConn->HostCert = AllocateZeroPool(sizeof( mbedtls_x509_crt));
+  mbedtls_x509_crt_init(TlsConn->HostCert);
 
   TlsConn->Conf->min_tls_version = MBEDTLS_SSL_VERSION_TLS1_2;
   TlsConn->Conf->max_tls_version = MBEDTLS_SSL_VERSION_TLS1_2;
@@ -168,11 +228,17 @@ TlsNew (
     return NULL;
   }
 
-  TlsConn->fd = AllocateZeroPool(sizeof(mbedtls_net_context));
-  mbedtls_net_init(TlsConn->fd);
+  TlsConn->Ssl->state = MBEDTLS_SSL_CLIENT_HELLO;
 
-  mbedtls_ssl_set_bio(TlsConn->Ssl, TlsConn->fd,
-                      mbedtls_net_send, mbedtls_net_recv, NULL);
+  TlsConn->TlsCipherBuffer.InBufferSize = MAX_BUFFER_SIZE;
+  TlsConn->TlsCipherBuffer.InBuffer = AllocateZeroPool(MAX_BUFFER_SIZE);
+
+  TlsConn->TlsCipherBuffer.OutBufferSize = 0;
+  TlsConn->TlsCipherBuffer.OutRemainderSize = 0;
+  TlsConn->TlsCipherBuffer.OutBuffer = AllocateZeroPool(MAX_BUFFER_SIZE);
+
+  mbedtls_ssl_set_bio(TlsConn->Ssl, &(TlsConn->TlsCipherBuffer),
+                      MbedtlsSend, MbedtlsRecv, NULL);
 
   return (VOID *)TlsConn;
 }

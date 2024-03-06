@@ -10,7 +10,6 @@ SPDX-License-Identifier: BSD-2-Clause-Patent
 
 #include "InternalTlsLib.h"
 
-#define MAX_BUFFER_SIZE  32768
 
 /**
   Checks if the TLS handshake was done.
@@ -44,9 +43,9 @@ TlsInHandshake (
   state = mbedtls_ssl_is_handshake_over(TlsConn->Ssl);
 
   if (state == 1) {
-    return FALSE;
-  } else {
     return TRUE;
+  } else {
+    return FALSE;
   }
 }
 
@@ -104,12 +103,125 @@ TlsDoHandshake (
     return EFI_INVALID_PARAMETER;
   }
 
-  while((Ret = mbedtls_ssl_handshake(TlsConn->Ssl) ) != 0 )
+
+// client parse server hello
+  if ((BufferIn != NULL) && (TlsConn->Ssl->conf->endpoint == MBEDTLS_SSL_IS_CLIENT )){
+      CopyMem(TlsConn->TlsCipherBuffer.InBuffer, BufferIn, BufferInSize);
+      TlsConn->TlsCipherBuffer.InBufferSize = BufferInSize;
+      TlsConn->TlsCipherBuffer.InRemainderSize = BufferInSize;
+  }
+
+
+  if ((BufferIn != NULL) && (TlsConn->Ssl->conf->endpoint == MBEDTLS_SSL_IS_SERVER ) && (TlsConn->Ssl->state == MBEDTLS_SSL_CLIENT_HELLO)){
+    CopyMem(TlsConn->TlsCipherBuffer.InBuffer, BufferIn, BufferInSize);
+    TlsConn->TlsCipherBuffer.InBufferSize = BufferInSize;
+    TlsConn->TlsCipherBuffer.InRemainderSize = BufferInSize;
+  }
+
+// server get client cipher/finished
+  if ((BufferIn != NULL) && (TlsConn->Ssl->conf->endpoint == MBEDTLS_SSL_IS_SERVER ) && (TlsConn->Ssl->state == MBEDTLS_SSL_CLIENT_CERTIFICATE)){
+    CopyMem(TlsConn->TlsCipherBuffer.InBuffer, BufferIn, BufferInSize);
+    TlsConn->TlsCipherBuffer.InBufferSize = BufferInSize;
+    TlsConn->TlsCipherBuffer.InRemainderSize = BufferInSize;
+  }
+
+
+if ((TlsConn->Ssl->conf->endpoint == MBEDTLS_SSL_IS_SERVER ) || ((TlsConn->Ssl->conf->endpoint == MBEDTLS_SSL_IS_CLIENT ) && (TlsConn->Ssl->state == MBEDTLS_SSL_CLIENT_HELLO) )) {
+  while((Ret = mbedtls_ssl_handshake_step(TlsConn->Ssl) ) != 0 )
   {
       if( Ret != MBEDTLS_ERR_SSL_WANT_READ && Ret != MBEDTLS_ERR_SSL_WANT_WRITE )
       {
           return EFI_ABORTED;
       }
+  }
+} else {
+
+  while(TlsConn->TlsCipherBuffer.InRemainderSize != 0) {
+      while((Ret = mbedtls_ssl_handshake_step(TlsConn->Ssl) ) != 0 )
+      {
+          if( Ret != MBEDTLS_ERR_SSL_WANT_READ && Ret != MBEDTLS_ERR_SSL_WANT_WRITE )
+          {
+              return EFI_ABORTED;
+          }
+      }
+  }
+}
+
+
+
+  if ((TlsConn->Ssl->state == MBEDTLS_SSL_SERVER_HELLO_DONE) && (TlsConn->Ssl->conf->endpoint == MBEDTLS_SSL_IS_CLIENT )) {
+
+    while (TlsConn->Ssl->state <= MBEDTLS_SSL_CLIENT_FINISHED ) {
+      while((Ret = mbedtls_ssl_handshake_step(TlsConn->Ssl) ) != 0 )
+      {
+          if( Ret != MBEDTLS_ERR_SSL_WANT_READ && Ret != MBEDTLS_ERR_SSL_WANT_WRITE )
+          {
+              return EFI_ABORTED;
+          }
+      }
+    }
+  }
+
+
+  if ((TlsConn->Ssl->state == MBEDTLS_SSL_FLUSH_BUFFERS) && (TlsConn->Ssl->conf->endpoint == MBEDTLS_SSL_IS_CLIENT )) {
+
+    while (TlsConn->Ssl->state <= MBEDTLS_SSL_HANDSHAKE_WRAPUP ) {
+      while((Ret = mbedtls_ssl_handshake_step(TlsConn->Ssl) ) != 0 )
+      {
+          if( Ret != MBEDTLS_ERR_SSL_WANT_READ && Ret != MBEDTLS_ERR_SSL_WANT_WRITE )
+          {
+              return EFI_ABORTED;
+          }
+      }
+    }
+  }
+
+
+//  把 clienthello 的信息传出来到 BufferOut
+  if ((TlsConn->Ssl->state == MBEDTLS_SSL_SERVER_HELLO) && (TlsConn->Ssl->conf->endpoint == MBEDTLS_SSL_IS_CLIENT )) {
+
+    if (BufferOut != NULL) {
+      CopyMem(BufferOut, TlsConn->Ssl->out_hdr  - TlsConn->Ssl->out_left, TlsConn->Ssl->out_left);
+      *BufferOutSize = TlsConn->Ssl->out_left;
+      TlsConn->Ssl->out_left = 0;
+    }
+  }
+
+
+  if (TlsConn->Ssl->conf->endpoint == MBEDTLS_SSL_IS_SERVER ) {
+
+    if (BufferOut != NULL) {
+
+      if (TlsConn->TlsCipherBuffer.OutRemainderSize != 0) {
+        CopyMem(BufferOut, TlsConn->TlsCipherBuffer.OutBuffer, TlsConn->TlsCipherBuffer.OutRemainderSize);
+        *BufferOutSize = TlsConn->TlsCipherBuffer.OutRemainderSize;
+        TlsConn->TlsCipherBuffer.OutRemainderSize = 0;
+      } else {
+        *BufferOutSize = 0;
+      }
+    }
+  }
+
+
+
+// client 
+  if ((TlsConn->Ssl->state == MBEDTLS_SSL_SERVER_CHANGE_CIPHER_SPEC) && (TlsConn->Ssl->conf->endpoint == MBEDTLS_SSL_IS_CLIENT )) {
+
+    if (BufferOut != NULL) {
+      CopyMem(BufferOut, TlsConn->TlsCipherBuffer.OutBuffer, TlsConn->TlsCipherBuffer.OutRemainderSize);
+      *BufferOutSize = TlsConn->TlsCipherBuffer.OutRemainderSize;
+
+      TlsConn->TlsCipherBuffer.OutRemainderSize = 0;
+    }
+  }
+
+
+//handshake over
+  if (TlsConn->Ssl->state == MBEDTLS_SSL_HANDSHAKE_OVER) {
+    TlsConn->TlsCipherBuffer.InRemainderSize = 0;
+    TlsConn->TlsCipherBuffer.InBufferSize = 0;
+    TlsConn->TlsCipherBuffer.OutRemainderSize = 0;
+    TlsConn->TlsCipherBuffer.OutBufferSize = 0;
   }
 
   return EFI_SUCCESS;
@@ -252,17 +364,21 @@ TlsCtrlTrafficOut (
   )
 {
   TLS_CONNECTION  *TlsConn;
+  UINTN CipherLen;
 
   TlsConn = (TLS_CONNECTION *)Tls;
-  if ((TlsConn == NULL) || (TlsConn->fd == NULL)) {
+  if ((TlsConn == NULL)) {
     return -1;
   }
 
-  //
-  // Read and return the amount of data from the BIO.
-  //
-  // return mbedtls_net_recv (TlsConn->fd, Buffer, (UINT32)BufferSize);
-  return BufferSize;
+  CopyMem(Buffer, TlsConn->TlsCipherBuffer.OutBuffer,
+          TlsConn->TlsCipherBuffer.OutRemainderSize);
+
+  CipherLen = TlsConn->TlsCipherBuffer.OutRemainderSize;
+  TlsConn->TlsCipherBuffer.OutRemainderSize = 0;
+
+
+  return CipherLen;
 }
 
 /**
@@ -290,14 +406,13 @@ TlsCtrlTrafficIn (
   TLS_CONNECTION  *TlsConn;
 
   TlsConn = (TLS_CONNECTION *)Tls;
-  if ((TlsConn == NULL) || (TlsConn->fd == NULL)) {
+  if ((TlsConn == NULL)) {
     return -1;
   }
 
-  //
-  // Write and return the amount of data to the BIO.
-  //
-  // return mbedtls_net_send (TlsConn->fd, Buffer, (UINT32)BufferSize);
+  CopyMem(TlsConn->TlsCipherBuffer.InBuffer, Buffer, BufferSize);
+  TlsConn->TlsCipherBuffer.InRemainderSize = BufferSize;
+  TlsConn->TlsCipherBuffer.InBufferSize = BufferSize;
   return BufferSize;
 }
 

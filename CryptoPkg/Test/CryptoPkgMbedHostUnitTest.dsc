@@ -25,6 +25,12 @@
   SynchronizationLib|MdePkg/Library/BaseSynchronizationLib/BaseSynchronizationLib.inf
   TimerLib|MdePkg/Library/BaseTimerLibNullTemplate/BaseTimerLibNullTemplate.inf
   UefiRuntimeServicesTableLib|MdePkg/Library/UefiRuntimeServicesTableLib/UefiRuntimeServicesTableLib.inf
+  TlsLib|CryptoPkg/Library/TlsLibMbedtls/TlsLib.inf
+
+  SafeIntLib|MdePkg/Library/BaseSafeIntLib/BaseSafeIntLib.inf
+  IntrinsicLib|CryptoPkg/Library/IntrinsicLib/IntrinsicLib.inf
+  MbedTlsLib|CryptoPkg/Library/MbedTlsLib/MbedTlsLibFull.inf
+
 
 [LibraryClasses.X64, LibraryClasses.IA32]
   RngLib|MdePkg/Library/BaseRngLib/BaseRngLib.inf
@@ -33,10 +39,9 @@
   #
   # Build HOST_APPLICATION that tests the SampleUnitTest
   #
-  CryptoPkg/Test/UnitTest/Library/BaseCryptLib/TestBaseCryptLibHost.inf {
-    <LibraryClasses>
-      MbedTlsLib|CryptoPkg/Library/MbedTlsLib/MbedTlsLibFull.inf
-  }
+  CryptoPkg/Test/UnitTest/Library/BaseCryptLib/TestBaseCryptLibHost.inf 
+  CryptoPkg/Test/UnitTest/Library/TlsLib/TestTlsLibHost.inf
+
 
 [BuildOptions]
   *_*_*_CC_FLAGS = -D DISABLE_NEW_DEPRECATED_INTERFACES
